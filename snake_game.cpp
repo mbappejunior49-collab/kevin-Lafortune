@@ -1,135 +1,89 @@
-#include <iostream>
-#include <conio.h>
-#include <windows.h>
-#include <ctime>
-using namespace std;
+#include <SFML/Graphics.hpp>
+#include <deque>
+#include <optional>
+#include <cstdlib>
 
-bool gameOver;
-const int width = 20;
-const int height = 20;
-int x, y, fruitX, fruitY, score;
-int tailX[100], tailY[100];
-int nTail;
-int delayTime = 100; // speed (lower = faster)
+const int CELL_SIZE = 20;
+const int WIDTH = 30;
+const int HEIGHT = 20;
 
-enum eDirection { STOP = 0, LEFT, RIGHT, UP, DOWN };
-eDirection dir;
-
-void Setup() {
-    gameOver = false;
-    dir = STOP;
-    x = width / 2;
-    y = height / 2;
-    srand(time(0));
-    fruitX = rand() % width;
-    fruitY = rand() % height;
-    score = 0;
-}
-
-void Draw() {
-    system("cls");
-
-    for (int i = 0; i < width + 2; i++) cout << "#";
-    cout << endl;
-
-    for (int i = 0; i < height; i++) {
-        for (int j = 0; j < width; j++) {
-            if (j == 0) cout << "#";
-
-            if (i == y && j == x)
-                cout << "O";
-            else if (i == fruitY && j == fruitX)
-                cout << "F";
-            else {
-                bool printTail = false;
-                for (int k = 0; k < nTail; k++) {
-                    if (tailX[k] == j && tailY[k] == i) {
-                        cout << "o";
-                        printTail = true;
-                    }
-                }
-                if (!printTail)
-                    cout << " ";
-            }
-
-            if (j == width - 1) cout << "#";
-        }
-        cout << endl;
-    }
-
-    for (int i = 0; i < width + 2; i++) cout << "#";
-    cout << endl;
-
-    cout << "Score: " << score << endl;
-}
-
-void Input() {
-    if (_kbhit()) {
-        switch (_getch()) {
-        case 'a': dir = LEFT; break;
-        case 'd': dir = RIGHT; break;
-        case 'w': dir = UP; break;
-        case 's': dir = DOWN; break;
-        case 'x': gameOver = true; break;
-        }
-    }
-}
-
-void Logic() {
-    int prevX = tailX[0];
-    int prevY = tailY[0];
-    int prev2X, prev2Y;
-    tailX[0] = x;
-    tailY[0] = y;
-
-    for (int i = 1; i < nTail; i++) {
-        prev2X = tailX[i];
-        prev2Y = tailY[i];
-        tailX[i] = prevX;
-        tailY[i] = prevY;
-        prevX = prev2X;
-        prevY = prev2Y;
-    }
-
-    switch (dir) {
-    case LEFT: x--; break;
-    case RIGHT: x++; break;
-    case UP: y--; break;
-    case DOWN: y++; break;
-    default: break;
-    }
-
-    // WALL COLLISION (no wrapping anymore)
-    if (x < 0 || x >= width || y < 0 || y >= height)
-        gameOver = true;
-
-    // SELF COLLISION
-    for (int i = 0; i < nTail; i++)
-        if (tailX[i] == x && tailY[i] == y)
-            gameOver = true;
-
-    // EAT FRUIT
-    if (x == fruitX && y == fruitY) {
-        score += 10;
-        fruitX = rand() % width;
-        fruitY = rand() % height;
-        nTail++;
-
-        // INCREASE SPEED
-        if (delayTime > 20)
-            delayTime -= 5;
-    }
-}
+enum Direction { UP, DOWN, LEFT, RIGHT };
 
 int main() {
-    Setup();
-    while (!gameOver) {
-        Draw();
-        Input();
-        Logic();
-        Sleep(delayTime);
+    sf::RenderWindow window(
+        sf::VideoMode(sf::Vector2u(WIDTH * CELL_SIZE, HEIGHT * CELL_SIZE)),
+        "Snake"
+    );
+
+    std::deque<sf::Vector2i> snake = { {10, 10}, {9, 10}, {8, 10} };
+    Direction dir = RIGHT;
+
+    sf::Vector2i food(15, 10);
+
+    sf::Clock clock;
+    float delay = 0.15f;
+
+    while (window.isOpen()) {
+        // Handle events
+        while (const std::optional event = window.pollEvent()) {
+            if (event->is<sf::Event::Closed>())
+                window.close();
+
+            if (event->is<sf::Event::KeyPressed>()) {
+                auto key = event->getIf<sf::Event::KeyPressed>();
+
+                if (key->code == sf::Keyboard::Key::W && dir != DOWN) dir = UP;
+                if (key->code == sf::Keyboard::Key::S && dir != UP) dir = DOWN;
+                if (key->code == sf::Keyboard::Key::A && dir != RIGHT) dir = LEFT;
+                if (key->code == sf::Keyboard::Key::D && dir != LEFT) dir = RIGHT;
+            }
+        }
+
+        // Move snake on timer
+        if (clock.getElapsedTime().asSeconds() > delay) {
+            clock.restart();
+
+            sf::Vector2i head = snake.front();
+
+            if (dir == UP) head.y--;
+            if (dir == DOWN) head.y++;
+            if (dir == LEFT) head.x--;
+            if (dir == RIGHT) head.x++;
+
+            snake.push_front(head);
+
+            // Eat food
+            if (head == food) {
+                food = sf::Vector2i(rand() % WIDTH, rand() % HEIGHT);
+            } else {
+                snake.pop_back();
+            }
+
+            // Wall collision
+            if (head.x < 0 || head.y < 0 || head.x >= WIDTH || head.y >= HEIGHT) {
+                window.close();
+            }
+        }
+
+        // Draw everything
+        window.clear();
+
+        sf::RectangleShape rect(sf::Vector2f(CELL_SIZE - 1, CELL_SIZE - 1));
+
+        // Draw snake
+        rect.setFillColor(sf::Color::Green);
+        for (auto& s : snake) {
+            rect.setPosition(sf::Vector2f(s.x * CELL_SIZE, s.y * CELL_SIZE));
+            window.draw(rect);
+        }
+
+        // Draw food
+        rect.setFillColor(sf::Color::Red);
+        rect.setPosition(sf::Vector2f(food.x * CELL_SIZE, food.y * CELL_SIZE));
+        window.draw(rect);
+
+        window.display();
     }
 
-    cout << "Game Over! Final Score: " << score << endl;
     return 0;
 }
